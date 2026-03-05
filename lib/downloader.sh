@@ -99,40 +99,19 @@ run_auto_update() {
     # Run automatic update if enabled
     logger info "Checking for updates..."
 
-    # First, update the downloader itself so it knows about the latest game version
+    # Update the downloader itself first
     $DOWNLOADER -check-update
 
-    local LOCAL_VERSION=""
-    if [ -f "$VERSION_FILE" ]; then
-        LOCAL_VERSION=$(cat $VERSION_FILE)
-    else
-        logger warn "Version file not found, forcing update"
-    fi
-
-    # -print-version returns the GAME version, not the downloader version
-    local GAME_VERSION=$($DOWNLOADER -print-version -skip-update-check 2>&1)
-
-    if [ $? -ne 0 ] || [ -z "$GAME_VERSION" ]; then
-        logger error "Failed to get game version."
-        exit 1
-    fi
-
-    if [ -n "$LOCAL_VERSION" ]; then
-        logger info "Local version: $LOCAL_VERSION"
-    fi
-    logger info "Latest version: $GAME_VERSION"
-
-    if [ "$LOCAL_VERSION" != "$GAME_VERSION" ]; then
-        logger warn "Version mismatch, downloading update..."
-        $DOWNLOADER -patchline $PATCHLINE -download-path server.zip
-
+    # Always run the downloader - it handles version checking internally
+    # and only downloads if a newer version is available for the patchline
+    logger info "Downloading latest server files for patchline: $PATCHLINE..."
+    if $DOWNLOADER -patchline $PATCHLINE -download-path server.zip; then
         save_patchline_version
         save_downloader_version
-
         extract_server_files
         logger success "Server has been updated successfully!"
     else
-        logger info "Server is up to date"
+        logger warn "Download failed or no update available, continuing with existing files"
     fi
 }
 
