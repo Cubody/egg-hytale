@@ -102,16 +102,44 @@ run_auto_update() {
     # Update the downloader itself first
     $DOWNLOADER -check-update
 
-    # Always run the downloader - it handles version checking internally
-    # and only downloads if a newer version is available for the patchline
-    logger info "Downloading latest server files for patchline: $PATCHLINE..."
+    # Get the latest version for this patchline from the downloader output
+    local DOWNLOAD_OUTPUT=$($DOWNLOADER -patchline $PATCHLINE -print-version -skip-update-check 2>&1)
+    local REMOTE_VERSION=$(echo "$DOWNLOAD_OUTPUT" | grep -oP '\d{4}\.\d{2}\.\d{2}-[a-f0-9]+' | head -1)
+
+    local LOCAL_VERSION=""
+    if [ -f "$VERSION_FILE" ]; then
+        LOCAL_VERSION=$(cat $VERSION_FILE)
+    fi
+
+    if [ -n "$LOCAL_VERSION" ]; then
+        logger info "Local version: $LOCAL_VERSION"
+    fi
+
+    if [ -n "$REMOTE_VERSION" ]; then
+        logger info "Remote version: $REMOTE_VERSION"
+    fi
+
+    # If we can compare versions, skip download when they match
+    if [ -n "$REMOTE_VERSION" ] && [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
+        logger info "Server is up to date"
+        return
+    fi
+
+    # Download the update
+    logger info "Downloading server files for patchline: $PATCHLINE..."
     if $DOWNLOADER -patchline $PATCHLINE -download-path server.zip; then
+        # Save the remote version if detected, otherwise fall back to -print-version
+        if [ -n "$REMOTE_VERSION" ]; then
+            echo "$REMOTE_VERSION" > $VERSION_FILE
+            logger success "Saved version info!"
+        else
+            save_downloader_version
+        fi
         save_patchline_version
-        save_downloader_version
         extract_server_files
         logger success "Server has been updated successfully!"
     else
-        logger warn "Download failed or no update available, continuing with existing files"
+        logger warn "Download failed, continuing with existing files"
     fi
 }
 
