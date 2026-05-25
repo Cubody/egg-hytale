@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: cubody/egg-hytale-custom
+  IMAGE_NAME: cubody/egg-hytale
 
 jobs:
   publish:

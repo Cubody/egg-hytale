@@ -12,7 +12,7 @@
         "java_version"
     ],
     "docker_images": {
-        "Hytale": "ghcr.io\/natroutter\/egg-hytale:latest"
+        "Hytale": "ghcr.io\/cubody\/egg-hytale:latest"
     },
     "file_denylist": [],
     "startup": ".\/start.sh",
