@@ -14,7 +14,10 @@ ensure_downloader() {
 }
 
 extract_first_version() {
-    grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-fA-F0-9]+' | head -1
+    # Server versions differ by patchline:
+    # - release can be date/hash, e.g. 2026.03.26-89796e57b
+    # - pre-release can be semver-like, e.g. 0.5.0-pre.9.1
+    grep -oE '([0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-fA-F0-9]+|[0-9]+(\.[0-9]+)+(-[A-Za-z0-9.]+)?)' | head -1
 }
 
 extract_downloader_latest_version() {
@@ -23,6 +26,12 @@ extract_downloader_latest_version() {
 
 extract_downloader_current_version() {
     sed -nE 's/.*\(current:[[:space:]]*([0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-fA-F0-9]+)\).*/\1/p' | head -1
+}
+
+is_dated_build_version() {
+    local VERSION="$1"
+
+    [[ "$VERSION" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-fA-F0-9]+$ ]]
 }
 
 version_build_id() {
@@ -48,9 +57,10 @@ server_versions_match() {
     local LOCAL_BUILD_ID=$(version_build_id "$LOCAL_VERSION")
     local REMOTE_BUILD_ID=$(version_build_id "$REMOTE_VERSION")
 
-    # Hytale sometimes republishes the same server build with a new date prefix.
-    # Treat identical build hashes as the same server to avoid re-downloading the full server.zip.
-    if [ -n "$LOCAL_BUILD_ID" ] && [ "$LOCAL_BUILD_ID" = "$REMOTE_BUILD_ID" ]; then
+    # Hytale release sometimes republishes the same server build with a new date prefix.
+    # Only apply hash-only matching to date/hash versions, not semver pre-release versions.
+    if is_dated_build_version "$LOCAL_VERSION" && is_dated_build_version "$REMOTE_VERSION" && \
+        [ -n "$LOCAL_BUILD_ID" ] && [ "$LOCAL_BUILD_ID" = "$REMOTE_BUILD_ID" ]; then
         return 0
     fi
 
@@ -335,8 +345,7 @@ save_server_version() {
         echo "$SERVER_VERSION" > "$VERSION_FILE"
         logger success "Saved version info!"
     else
-        logger error "Failed to get server version."
-        exit 1
+        logger warn "Failed to get server version; continuing without updating version cache"
     fi
 }
 
