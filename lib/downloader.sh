@@ -281,10 +281,6 @@ run_auto_update() {
     # it does not replace itself, so we download and install the new binary here.
     ensure_downloader_latest
 
-    # Get the latest version for this patchline from the downloader output
-    local DOWNLOAD_OUTPUT=$($DOWNLOADER -patchline "$PATCHLINE" -print-version -skip-update-check 2>&1)
-    local REMOTE_VERSION=$(echo "$DOWNLOAD_OUTPUT" | extract_first_version)
-
     local LOCAL_VERSION=""
     if [ -f "$VERSION_FILE" ]; then
         LOCAL_VERSION=$(cat "$VERSION_FILE")
@@ -294,8 +290,29 @@ run_auto_update() {
         logger info "Local version: $LOCAL_VERSION"
     fi
 
+    # Get the latest version for this patchline. The check sometimes gets no answer (network, Hytale's API): it is
+    # tried again, and only the downloader's own output on success counts (stdout, exit 0), so an error message
+    # with numbers in it is never taken for a version.
+    local REMOTE_VERSION=""
+    local PRINT_OUTPUT=""
+    local ATTEMPT
+    for ATTEMPT in 1 2 3; do
+        if PRINT_OUTPUT=$(timeout 60 $DOWNLOADER -patchline "$PATCHLINE" -print-version -skip-update-check 2>/tmp/print-version.err </dev/null); then
+            REMOTE_VERSION=$(echo "$PRINT_OUTPUT" | tail -n 1 | extract_first_version)
+        fi
+        if [ -n "$REMOTE_VERSION" ]; then
+            break
+        fi
+        logger warn "Could not read the remote version (attempt $ATTEMPT/3): $(tail -n 1 /tmp/print-version.err 2>/dev/null)"
+        [ "$ATTEMPT" -lt 3 ] && sleep $((ATTEMPT * 5))
+    done
+
     if [ -n "$REMOTE_VERSION" ]; then
         logger info "Remote version: $REMOTE_VERSION"
+    elif [ -n "$LOCAL_VERSION" ] && [ -f "HytaleServer.jar" ]; then
+        # Unknown is not newer: downloading 1.6 GB on every failed check re-installed the same build.
+        logger warn "Remote version unknown; keeping the installed $LOCAL_VERSION without downloading"
+        return
     fi
 
     # If we can compare versions, skip download when they match.
